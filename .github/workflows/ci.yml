@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install project + deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run unit tests
+        run: pytest -q
+
+      # ─────────────────────────────────────────────────────────
+      # Optional: rebuild README thumbnails if tests pass
+      # ─────────────────────────────────────────────────────────
+      - name: Rebuild thumbnails
+        if: success()
+        run: |
+          python scripts/update_thumbnails.py
+
+      - name: Upload thumbnails (artifact)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: thumbnails
+          path: docs/img/*.png
+
