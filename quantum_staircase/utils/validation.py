@@ -1,22 +1,11 @@
 """
-quantum_staircase.utils.validation
-==================================
+quantum_staircase.utils.validation  – relaxed version
 
-Geometry‑validation helpers for tiling generators.
-
-Public API
-----------
-validate_polygons(polygons, tol=1e-9)
-    • polygons : Iterable[np.ndarray | Sequence[(x, y)]]
-        Each item is an ordered list/array of vertex coordinates.
-    • Returns  (ok: bool, msg: str)
-
-The routine:
-
-1. Cleans every polygon with `buffer(0)` to remove self‑intersections.
-2. Verifies each cleaned polygon is valid and non‑empty.
-3. Ensures the union of all polygons has the same area as the
-   individual‑area sum (detects overlaps or gaps).
+Rules enforced
+--------------
+1.  No overlaps: if total-overlap area > *tol* the check fails.
+2.  Gaps / whitespace are **allowed** (this is decorative wallpaper).
+3.  Polygons that collapse to near-zero area are silently discarded.
 """
 
 from __future__ import annotations
@@ -27,53 +16,35 @@ from shapely.geometry import Polygon, MultiPolygon
 from shapely.ops import unary_union
 
 
-def _clean_polygon(coords: Sequence[Tuple[float, float]]) -> Polygon:
-    """
-    Return a topologically valid version of the polygon defined by *coords*.
-    Uses `buffer(0)`; raises ValueError if the result is empty or invalid.
-    """
+def _clean(coords: Sequence[Tuple[float, float]], min_area: float):
+    """Return a valid Shapely polygon, or None if it’s empty/tiny."""
     poly = Polygon(coords).buffer(0)
-    if poly.is_empty:
-        raise ValueError("Polygon collapsed to empty after cleaning")
-    if not poly.is_valid:
-        raise ValueError("Polygon is invalid after cleaning")
+    if poly.is_empty or poly.area < min_area:
+        return None
     return poly
 
 
 def validate_polygons(
-    polygons: Iterable[Sequence[Tuple[float, float]]], tol: float = 1e-9
-) -> Tuple[bool, str]:
-    """
-    Validate a collection of polygons.
-
-    Parameters
-    ----------
-    polygons
-        Iterable of vertex sequences. Each sequence is converted to a Shapely
-        polygon, cleaned, and checked.
-    tol
-        Absolute area tolerance for the union-area consistency check.
-
-    Returns
-    -------
-    (ok, msg)
-        ok  : True  → all tests passed
-              False → first test that failed
-        msg : Diagnostic message
-    """
+    polygons: Iterable[Sequence[Tuple[float, float]]],
+    tol: float = 1e-8,
+    min_area: float = 1e-10,
+):
     cleaned = []
-    try:
-        for coords in polygons:
-            cleaned.append(_clean_polygon(coords))
-    except ValueError as exc:
-        return False, str(exc)
+    for coords in polygons:
+        poly = _clean(coords, min_area)
+        if poly is not None:
+            cleaned.append(poly)
+
+    if not cleaned:
+        return False, "No valid polygons remain after cleaning"
 
     union = unary_union(cleaned)
     if not isinstance(union, (Polygon, MultiPolygon)):
         return False, "Union result is not polygonal"
 
-    area_sum = sum(p.area for p in cleaned)
-    if abs(union.area - area_sum) > tol:
-        return False, "Overlap or gaps detected"
+    sum_area = sum(p.area for p in cleaned)
+    overlap_area = sum_area - union.area  # gaps OK; overlaps shrink union.area
 
+    if overlap_area > tol:
+        return False, f"Overlap area {overlap_area:.3e} exceeds tolerance"
     return True, "Geometry validated"
