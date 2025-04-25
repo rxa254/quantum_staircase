@@ -1,5 +1,7 @@
+# requirements.txt  
 numpy
 matplotlib
 shapely
 scipy
 pytest
+hypothesis
