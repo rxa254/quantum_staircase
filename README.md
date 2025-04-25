@@ -1,6 +1,5 @@
 # Quantum Staircase Tiling Generator
 
-[![CI](https://github.com/rxa254/quantum-staircase/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rxa254/quantum-staircase/actions/workflows/ci.yml)
 [![CI](https://github.com/rxa254/quantum_staircase/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rxa254/quantum_staircase/actions/workflows/ci.yml)
 
 [![Python 3.9–3.11](https://img.shields.io/badge/python-3.9‒3.11-blue.svg)](https://www.python.org/)  
