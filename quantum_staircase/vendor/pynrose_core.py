@@ -1,16 +1,18 @@
-# quantum_staircase/vendor/pynrose_core.py
 """
-pynrose_core.py  (MIT License)
-------------------------------
+pynrose_core.py  (MIT License, vendored)
 
-Very small, self-contained Penrose P3 tiler extracted from the public
-*pynrose* project (github.com/njeffries/pynrose).  The full library supports
-rendering & SVG export; we strip it down to in-memory geometry only.
+Minimal, dependency-free Penrose P3 tiler.
 
-* Given an inflation *level*, `PenroseTiling` builds a list of thick/thin
-  rhombs without introducing self-intersections or zero-area artefacts.
-* Coordinates are returned as plain Python tuples; we convert to NumPy arrays
-  in the wrapper to keep the rest of the codebase unchanged.
+Changes from the previous revision
+----------------------------------
+* Replaced tuple arithmetic that relied on `/` with an explicit `_lerp`
+  helper to avoid TypeError (“unsupported operand type(s) for /:”).
+* All vector maths now stays inside helper functions—no tuple/float
+  operations are performed directly.
+
+Interface
+---------
+PenroseTiling(level).tile_vertices()  ->  List[Tuple[(x, y), ...]]  (len 4)
 """
 
 from __future__ import annotations
@@ -23,38 +25,35 @@ Vec = Tuple[float, float]
 Rhomb = Tuple[Sequence[Vec], str]  # (4-tuple of vertices, "thick"/"thin")
 
 
+# ----------------------------------------------------------------------
+# Vector helpers (no third-party deps)
+# ----------------------------------------------------------------------
+def _lerp(u: Vec, v: Vec, alpha: float) -> Vec:
+    """Linear interpolate: u + alpha*(v-u)."""
+    return (u[0] + alpha * (v[0] - u[0]), u[1] + alpha * (v[1] - u[1]))
+
+
 def _rot(v: Vec, angle: float) -> Vec:
-    """Rotate vector *v* CCW by *angle* radians."""
     x, y = v
     c, s = cos(angle), sin(angle)
     return (c * x - s * y, s * x + c * y)
 
 
-def _add(u: Vec, v: Vec) -> Vec:
-    return (u[0] + v[0], u[1] + v[1])
-
-
-def _sub(u: Vec, v: Vec) -> Vec:
-    return (u[0] - v[0], u[1] - v[1])
-
-
+# ----------------------------------------------------------------------
+# Core tiler
+# ----------------------------------------------------------------------
 class PenroseTiling:
-    """Minimal thick/thin-rhomb tiler suitable for inflation levels ≤ 8."""
+    """Inflation-based thick/thin rhombus tiler."""
 
-    def __init__(self, level: int = 4) -> None:
+    def __init__(self, level: int = 4):
         self.level = level
         self._tiles: List[Rhomb] = self._inflate(level)
 
-    # ------------------------------------------------------------------
-    # Public interface
-    # ------------------------------------------------------------------
+    # ------------------  public  ------------------
     def tile_vertices(self) -> List[Sequence[Vec]]:
-        """Return a list of polys; each poly is a 4-tuple of (x, y)."""
         return [coords for coords, _ in self._tiles]
 
-    # ------------------------------------------------------------------
-    # Inflation logic
-    # ------------------------------------------------------------------
+    # ------------------  private  -----------------
     @staticmethod
     def _seed() -> List[Rhomb]:
         """Star of ten thick rhombs around the origin."""
@@ -72,19 +71,21 @@ class PenroseTiling:
     def _inflate_once(rhomb: Rhomb) -> List[Rhomb]:
         coords, kind = rhomb
         A, B, C, D = coords
+
         if kind == "thick":
-            P = _add(A, _sub(B, A) / tau)
-            Q = _add(D, _sub(A, D) / tau)
-            R = _add(B, _sub(C, B) / tau)
+            P = _lerp(A, B, 1 / tau)
+            Q = _lerp(D, A, 1 / tau)
+            R = _lerp(B, C, 1 / tau)
             return [
                 ((A, P, Q, D), "thick"),
                 ((P, B, R, Q), "thin"),
                 ((Q, R, C, D), "thick"),
             ]
-        # thin
-        P = _add(B, _sub(A, B) / tau)
-        Q = _add(B, _sub(C, B) / tau)
-        R = _add(D, _sub(A, D) / tau)
+
+        # thin rhomb
+        P = _lerp(B, A, 1 / tau)
+        Q = _lerp(B, C, 1 / tau)
+        R = _lerp(D, A, 1 / tau)
         return [
             ((P, A, R, D), "thin"),
             ((P, Q, C, R), "thick"),
